@@ -15,10 +15,9 @@ const bigValue = document.getElementById('bigValue');
 const alsoLine = document.getElementById('alsoLine');
 const copyBtn = document.getElementById('copyBtn');
 
-let lastEdited = 'real';   // which side the user typed in
+let lastEdited = 'real';
 let copyText = '';
 
-// tidy number formatting
 function fmt(v){
   if(!isFinite(v)) return '—';
   const a = Math.abs(v);
@@ -31,7 +30,6 @@ function fmt(v){
   return s;
 }
 
-// current scale denominator N (model = real / N)
 function currentN(){
   if(scale.value === 'custom'){
     const v = parseFloat(customN.value);
@@ -69,4 +67,59 @@ function clearResult(){
 }
 
 function renderResult(mm, label, outUnit){
-  resultLabel.textContent =
+  resultLabel.textContent = label;
+  bigValue.textContent = fmt(mm / U[outUnit]) + ' ' + outUnit;
+  const all = {
+    in: mm/U.in, ft: mm/U.ft, mm: mm/U.mm, cm: mm/U.cm, m: mm/U.m
+  };
+  const also = Object.keys(all)
+    .filter(u => u !== outUnit)
+    .map(u => fmt(all[u]) + ' ' + u)
+    .join('   ·   ');
+  alsoLine.textContent = 'Also:  ' + also;
+  copyText = Object.keys(all).map(u => fmt(all[u]) + ' ' + u).join(' / ');
+}
+
+function compute(){
+  const n = currentN();
+  updateScaleInfo(n);
+  if(!isFinite(n)){ clearResult(); return; }
+
+  if(lastEdited === 'model'){
+    const v = parseFloat(modelVal.value);
+    if(!isFinite(v)){ clearResult(); realVal.value=''; return; }
+    const modelMM = v * U[modelUnit.value];
+    const realMM = modelMM * n;
+    realVal.value = fmt(realMM / U[realUnit.value]);
+    renderResult(realMM, 'Real size', realUnit.value);
+  } else {
+    const v = parseFloat(realVal.value);
+    if(!isFinite(v)){ clearResult(); modelVal.value=''; return; }
+    const realMM = v * U[realUnit.value];
+    const modelMM = realMM / n;
+    modelVal.value = fmt(modelMM / U[modelUnit.value]);
+    renderResult(modelMM, 'Model size', modelUnit.value);
+  }
+}
+
+realVal.addEventListener('input', () => { lastEdited='real'; compute(); });
+modelVal.addEventListener('input', () => { lastEdited='model'; compute(); });
+realUnit.addEventListener('change', compute);
+modelUnit.addEventListener('change', compute);
+customN.addEventListener('input', compute);
+scale.addEventListener('change', () => {
+  const isCustom = scale.value === 'custom';
+  customWrap.classList.toggle('hidden', !isCustom);
+  if(isCustom) customN.focus();
+  compute();
+});
+copyBtn.addEventListener('click', async () => {
+  if(!copyText) return;
+  try{
+    await navigator.clipboard.writeText(copyText);
+    copyBtn.textContent = 'Copied';
+    setTimeout(() => copyBtn.textContent = 'Copy all', 1200);
+  }catch(e){ copyBtn.textContent = 'Copy failed'; }
+});
+
+compute();   // run once on load

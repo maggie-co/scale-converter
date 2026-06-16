@@ -1,93 +1,72 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Scale Converter</title>
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <div class="wrap">
-    <header class="head">
-      <h1>Scale Converter</h1>
-      <p class="sub">Convert real-world dimensions to model scale and back.</p>
-    </header>
-    <div class="ruler" aria-hidden="true"></div>
+// Unit -> millimeters. Add a unit here and it works everywhere.
+const U = { in:25.4, ft:304.8, mm:1, cm:10, m:1000 };
 
-    <main class="card">
-      <!-- Two-way input -->
-      <div class="io">
-        <div class="field">
-          <label for="realVal">Real dimensions</label>
-          <input id="realVal" class="value" type="number" inputmode="decimal" value="47">
-          <select id="realUnit" class="unit" aria-label="Real unit">
-            <option value="in" selected>inches</option>
-            <option value="ft">feet</option>
-            <option value="mm">millimeters</option>
-            <option value="cm">centimeters</option>
-            <option value="m">meters</option>
-          </select>
-        </div>
+const realVal = document.getElementById('realVal');
+const realUnit = document.getElementById('realUnit');
+const modelVal = document.getElementById('modelVal');
+const modelUnit = document.getElementById('modelUnit');
+const scale = document.getElementById('scale');
+const customWrap = document.getElementById('customWrap');
+const customN = document.getElementById('customN');
+const scaleInfo = document.getElementById('scaleInfo');
+const paperInfo = document.getElementById('paperInfo');
+const resultLabel = document.getElementById('resultLabel');
+const bigValue = document.getElementById('bigValue');
+const alsoLine = document.getElementById('alsoLine');
+const copyBtn = document.getElementById('copyBtn');
 
-        <div class="swap" aria-hidden="true">&#8596;</div>
+let lastEdited = 'real';   // which side the user typed in
+let copyText = '';
 
-        <div class="field">
-          <label for="modelVal">Model dimensions</label>
-          <input id="modelVal" class="value" type="number" inputmode="decimal">
-          <select id="modelUnit" class="unit" aria-label="Model unit">
-            <option value="in">inches</option>
-            <option value="ft">feet</option>
-            <option value="mm" selected>millimeters</option>
-            <option value="cm">centimeters</option>
-            <option value="m">meters</option>
-          </select>
-        </div>
-      </div>
+// tidy number formatting
+function fmt(v){
+  if(!isFinite(v)) return '—';
+  const a = Math.abs(v);
+  let d;
+  if(a===0) return '0';
+  if(a>=1000) d=0; else if(a>=100) d=1; else if(a>=1) d=2;
+  else if(a>=0.1) d=3; else d=4;
+  let s = v.toFixed(d);
+  if(s.indexOf('.')>=0) s = s.replace(/0+$/,'').replace(/\.$/,'');
+  return s;
+}
 
-      <!-- Scale -->
-      <div class="scale-row">
-        <label for="scale">Scale</label>
-        <select id="scale" class="scale">
-          <optgroup label="Architectural (US)">
-            <option value="48">1/4" = 1'-0" (1:48)</option>
-            <option value="96">1/8" = 1'-0" (1:96)</option>
-            <option value="192">1/16" = 1'-0" (1:192)</option>
-            <option value="384">1/32" = 1'-0" (1:384)</option>
-          </optgroup>
-          <optgroup label="Engineering / Metric">
-            <option value="10">1:10</option>
-            <option value="20">1:20</option>
-            <option value="50">1:50</option>
-            <option value="100">1:100</option>
-            <option value="200">1:200</option>
-            <option value="500">1:500</option>
-          </optgroup>
-          <optgroup label="Model-making">
-            <option value="12" selected>1:12</option>
-            <option value="24">1:24</option>
-            <option value="48">1:48</option>
-            <option value="87">1:87</option>
-          </optgroup>
-          <option value="custom">Custom scale…</option>
-        </select>
-        <div id="customWrap" class="custom hidden">
-          <span>1 :</span>
-          <input id="customN" class="value sm" type="number" inputmode="decimal" placeholder="75">
-        </div>
-      </div>
+// current scale denominator N (model = real / N)
+function currentN(){
+  if(scale.value === 'custom'){
+    const v = parseFloat(customN.value);
+    return (isFinite(v) && v>0) ? v : NaN;
+  }
+  return parseFloat(scale.value);
+}
 
-      <p id="scaleInfo" class="scaleinfo"></p>
-      <p id="paperInfo" class="paperinfo"></p>
+function paperHint(n){
+  if(!isFinite(n)) return '';
+  if(n<=24) return 'Best for details and small objects. Fits A4–A3.';
+  if(n<=60) return 'Good for furniture and room plans. Fits A3 or 11×17.';
+  if(n<=120) return 'Floor plans. Use A3–A2.';
+  if(n<=250) return 'Building and site plans. A2 or larger.';
+  return 'Masterplans. A1 or larger.';
+}
 
-      <!-- Result -->
-      <div class="result" aria-live="polite">
-        <span id="resultLabel" class="rlabel">Model size</span>
-        <div class="big" id="bigValue">—</div>
-        <div id="alsoLine" class="also"></div>
-        <button id="copyBtn" class="copy" type="button">Copy all</button>
-      </div>
-    </main>
-  </div>
-  <script src="script.js"></script>
-</body>
-</html>
+function updateScaleInfo(n){
+  let label;
+  if(scale.value === 'custom'){
+    label = 'Custom (1:' + (isFinite(n)?fmt(n):'?') + ')';
+  } else {
+    label = scale.options[scale.selectedIndex].text;
+  }
+  scaleInfo.textContent = isFinite(n)
+    ? label + '  ·  divide real by ' + fmt(n) + ' for model'
+    : label + '  ·  enter a scale';
+  paperInfo.textContent = paperHint(n);
+}
+
+function clearResult(){
+  bigValue.textContent = '—';
+  alsoLine.textContent = '';
+  copyText = '';
+}
+
+function renderResult(mm, label, outUnit){
+  resultLabel.textContent =
